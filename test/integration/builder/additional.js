@@ -84,6 +84,52 @@ module.exports = function (knex) {
             expect(res.queryContext).to.equal('the context');
           });
       });
+
+      it('should handle error correctly in a stream', (done) => {
+        const stream = knex('wrongtable').limit(1).stream();
+        stream.on('error', () => {
+          done();
+        });
+      });
+
+      it('should process response done through a stream', (done) => {
+        let response;
+        const stream = knex('accounts').limit(1).stream();
+
+        stream.on('data', (res) => {
+          response = res;
+        });
+        stream.on('finish', () => {
+          expect(response.callCount).to.equal(1);
+          done();
+        });
+      });
+
+      it('should pass query context for responses through a stream', (done) => {
+        let response;
+        const stream = knex('accounts')
+          .queryContext('the context')
+          .limit(1)
+          .stream();
+
+        stream.on('data', (res) => {
+          response = res;
+        });
+        stream.on('finish', () => {
+          expect(response.queryContext).to.equal('the context');
+          done();
+        });
+      });
+
+      it('should process response for each row done through a stream', (done) => {
+        const stream = knex('accounts').limit(5).stream();
+        let count = 0;
+        stream.on('data', () => count++);
+        stream.on('finish', () => {
+          expect(count).to.equal(5);
+          done();
+        });
+      });
     });
 
     describe('columnInfo with wrapIdentifier and postProcessResponse', () => {
@@ -633,6 +679,7 @@ module.exports = function (knex) {
               ]);
               //tester('oracledb', ['alter table "accounts" drop ("first_name")']);
               tester('mssql', [
+                "\n              DECLARE @constraint varchar(100) = (SELECT default_constraints.name\n                                                  FROM sys.all_columns\n                                                  INNER JOIN sys.tables\n                                                    ON all_columns.object_id = tables.object_id\n                                                  INNER JOIN sys.schemas\n                                                    ON tables.schema_id = schemas.schema_id\n                                                  INNER JOIN sys.default_constraints\n                                                    ON all_columns.default_object_id = default_constraints.object_id\n                                                  WHERE schemas.name = 'dbo'\n                                                  AND tables.name = 'accounts'\n                                                  AND all_columns.name = 'first_name')\n\n              IF @constraint IS NOT NULL EXEC('ALTER TABLE accounts DROP CONSTRAINT ' + @constraint)",
                 'ALTER TABLE [accounts] DROP COLUMN [first_name]',
               ]);
             });
